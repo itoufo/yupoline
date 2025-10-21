@@ -96,17 +96,35 @@ async function handleFortuneTelling(event, userProfile, profile) {
   const messageText = event.message.text
 
   try {
-    // セッションを取得または作成
-    const session = await getOrCreateSession(userId, 'fortune_telling', 'ask_birthdate')
+    // 「無料鑑定」メッセージの場合は新しいセッションを開始
+    if (messageText === '無料鑑定') {
+      // 既存のアクティブセッションを完了
+      const existingSession = await getActiveSession(userId, 'fortune_telling')
+      if (existingSession) {
+        await completeSession(existingSession.id)
+      }
+
+      // 新しいセッションを作成
+      const session = await getOrCreateSession(userId, 'fortune_telling', 'ask_birthdate')
+
+      // アクティビティログを保存
+      await saveActivityLog(userId, 'fortune_telling_start', { message: messageText })
+
+      // 誕生日を聞く
+      return askBirthdate(event, profile)
+    }
+
+    // 既存のセッションを取得
+    const session = await getActiveSession(userId, 'fortune_telling')
+
+    if (!session) {
+      // セッションがない場合は新規作成して誕生日を聞く
+      const newSession = await getOrCreateSession(userId, 'fortune_telling', 'ask_birthdate')
+      return askBirthdate(event, profile)
+    }
 
     // アクティビティログを保存
     await saveActivityLog(userId, 'fortune_telling_request', { message: messageText, state: session.current_state })
-
-    // 初回の「無料鑑定」メッセージの場合
-    if (messageText === '無料鑑定' && !session.current_state) {
-      await updateSession(session.id, 'ask_birthdate', {})
-      return askBirthdate(event, profile)
-    }
 
     // セッションの状態に応じて処理を分岐
     switch (session.current_state) {
@@ -120,7 +138,7 @@ async function handleFortuneTelling(event, userProfile, profile) {
         return await handleCategoryResponse(event, session, userProfile, profile)
 
       default:
-        // 新しいセッションを開始
+        // 不明な状態の場合は新しいセッションを開始
         await updateSession(session.id, 'ask_birthdate', {})
         return askBirthdate(event, profile)
     }

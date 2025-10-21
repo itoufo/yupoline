@@ -4,7 +4,9 @@
       "Bash(npm install:*)",
       "Bash(npm run dev:*)",
       "Bash(git push:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd step-by-step fortune telling flow with birthdate, blood type, and category selection\n\n- Add blood_type field to user_profiles table\n- Add current_state and session_data fields to conversation_sessions table\n- Implement multi-step fortune telling flow:\n  1. Ask for birthdate\n  2. Ask for blood type (with quick reply buttons)\n  3. Ask for fortune category (love, work, money, general, relationships)\n- Add session state management (updateSession, completeSession)\n- Implement flexible input parsing for birthdates and blood types\n- Save user birthdate and blood type to profile\n- Prioritize active fortune telling sessions in message routing\n- Add quick reply buttons for all selection steps\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix fortune telling flow to always ask birthdate first when \"無料鑑定\" is sent\n\n- \"無料鑑定\" message now always starts fresh session and asks for birthdate\n- Complete existing active session before starting new one\n- Only process birthdate/blood type/category responses when in active session\n- Fix logic to prevent skipping birthdate question\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
