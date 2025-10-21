@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
-// Netlifyの環境変数からenv.jsファイルを生成するビルドスクリプト
+// .envファイルまたはNetlifyの環境変数からenv.jsファイルを生成するビルドスクリプト
 const fs = require('fs');
 const path = require('path');
+
+// ローカル開発では.envファイルを読み込む
+// Netlifyでは環境変数が自動的に設定されているので.envは不要
+if (fs.existsSync('.env')) {
+    require('dotenv').config();
+}
 
 const envContent = `// This file is auto-generated during build
 window.ENV = {

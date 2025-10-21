@@ -26,11 +26,13 @@ yupoline/
 │   ├── css/
 │   │   └── style.css       # スタイルシート
 │   ├── js/
+│   │   ├── env.js          # 環境変数（ビルド時自動生成）
 │   │   ├── config.js       # 環境変数設定
 │   │   ├── supabase.js     # Supabaseクライアント
 │   │   └── app.js          # メインアプリケーション
 │   ├── _headers            # Netlifyヘッダー設定
 │   └── _redirects          # Netlifyリダイレクト設定
+├── build.js                # ビルドスクリプト
 ├── netlify.toml            # Netlify設定
 ├── package.json            # NPM設定
 ├── .env.example            # 環境変数テンプレート
@@ -94,8 +96,11 @@ CREATE INDEX idx_activity_logs_created_at ON yupoline_activity_logs(created_at);
 npm install
 
 # 環境変数ファイルの作成（初回のみ）
-cp public/js/env.example.js public/js/env.js
-# public/js/env.js を編集して実際の値を設定
+cp .env.example .env
+# .env を編集して実際の値を設定
+
+# ビルド（env.jsを生成）
+npm run build
 
 # 開発サーバーの起動
 npm run dev
@@ -139,7 +144,11 @@ Netlify ダッシュボードで以下の環境変数を設定:
 1. Site settings → Environment variables
 2. Add a variable で各変数を追加
 
-**重要**: ビルド時に `npm run build` が実行され、これらの環境変数から `public/js/env.js` ファイルが自動生成されます。このファイルにより、ブラウザ側で環境変数を利用できるようになります。
+**仕組み**:
+- ローカル開発: `.env` ファイルから環境変数を読み込み
+- Netlify: ダッシュボードで設定した環境変数を使用
+- ビルド時に `npm run build` が実行され、環境変数から `public/js/env.js` ファイルが自動生成されます
+- このファイルにより、ブラウザ側で環境変数を利用できるようになります
 
 ### 5. LIFF設定の更新
 
