@@ -3,12 +3,6 @@
   publish = "dist"
   command = "npm run build"
 
-# SPA用のcatch-allリダイレクト（Netlify Functionsは自動的に除外される）
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-  force = false
 
 [build.environment]
   NODE_VERSION = "18"
