@@ -6,3 +6,10 @@ node_modules/
 .netlify/
 dist/
 public/js/env.js
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo

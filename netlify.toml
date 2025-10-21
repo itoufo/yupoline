@@ -3,6 +3,12 @@
   publish = "dist"
   command = "npm run build"
 
+# SPA用のリダイレクト（静的ファイルとFunctionsは自動的に除外）
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 
 [build.environment]
   NODE_VERSION = "18"
