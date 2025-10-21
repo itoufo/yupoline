@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS yupoline_user_profiles (
   line_user_id VARCHAR(255) UNIQUE NOT NULL,
   -- 基本情報
   birth_date DATE,
+  blood_type VARCHAR(5), -- A, B, AB, O
   gender VARCHAR(50),
   occupation VARCHAR(255),
   -- プロファイリングデータ（AIが分析した情報）
@@ -55,6 +56,8 @@ CREATE TABLE IF NOT EXISTS yupoline_conversation_sessions (
   line_user_id VARCHAR(255) NOT NULL,
   session_type VARCHAR(50) NOT NULL, -- 'fortune_telling' or 'consultation'
   status VARCHAR(50) DEFAULT 'active', -- 'active', 'completed', 'expired'
+  current_state VARCHAR(50), -- 鑑定フローの現在の状態: 'ask_birthdate', 'ask_blood_type', 'ask_category', 'processing'
+  session_data JSONB, -- セッション固有のデータ（誕生日、血液型、カテゴリなど）
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   ended_at TIMESTAMP WITH TIME ZONE,

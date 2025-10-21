@@ -88,12 +88,13 @@ export async function getConversationHistory(lineUserId, limit = 10) {
 }
 
 // アクティブなセッションの取得または作成
-export async function getOrCreateSession(lineUserId, sessionType) {
+export async function getOrCreateSession(lineUserId, sessionType, initialState = null) {
   // 既存のアクティブセッションを探す
   const { data: existingSessions, error: fetchError } = await supabase
     .from('yupoline_conversation_sessions')
     .select('*')
     .eq('line_user_id', lineUserId)
+    .eq('session_type', sessionType)
     .eq('status', 'active')
     .order('started_at', { ascending: false })
     .limit(1)
@@ -120,6 +121,8 @@ export async function getOrCreateSession(lineUserId, sessionType) {
       line_user_id: lineUserId,
       session_type: sessionType,
       status: 'active',
+      current_state: initialState,
+      session_data: {},
       started_at: new Date().toISOString(),
       last_activity_at: new Date().toISOString()
     })
@@ -128,6 +131,44 @@ export async function getOrCreateSession(lineUserId, sessionType) {
 
   if (createError) throw createError
   return newSession
+}
+
+// セッションの更新（ステートとデータ）
+export async function updateSession(sessionId, state, sessionData = null) {
+  const updateData = {
+    current_state: state,
+    last_activity_at: new Date().toISOString()
+  }
+
+  if (sessionData !== null) {
+    updateData.session_data = sessionData
+  }
+
+  const { data, error } = await supabase
+    .from('yupoline_conversation_sessions')
+    .update(updateData)
+    .eq('id', sessionId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// セッションの完了
+export async function completeSession(sessionId) {
+  const { data, error } = await supabase
+    .from('yupoline_conversation_sessions')
+    .update({
+      status: 'completed',
+      ended_at: new Date().toISOString()
+    })
+    .eq('id', sessionId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
 // アクティビティログの保存
