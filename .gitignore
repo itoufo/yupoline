@@ -5,3 +5,4 @@ node_modules/
 *.log
 .netlify/
 dist/
+public/js/env.js

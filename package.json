@@ -5,7 +5,7 @@
   "main": "public/index.html",
   "scripts": {
     "dev": "npx serve public",
-    "build": "echo 'No build step required for static site'",
+    "build": "node build.js",
     "preview": "npx serve public"
   },
   "keywords": [

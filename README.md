@@ -93,6 +93,10 @@ CREATE INDEX idx_activity_logs_created_at ON yupoline_activity_logs(created_at);
 # 依存関係のインストール
 npm install
 
+# 環境変数ファイルの作成（初回のみ）
+cp public/js/env.example.js public/js/env.js
+# public/js/env.js を編集して実際の値を設定
+
 # 開発サーバーの起動
 npm run dev
 ```
@@ -134,6 +138,8 @@ Netlify ダッシュボードで以下の環境変数を設定:
 設定方法:
 1. Site settings → Environment variables
 2. Add a variable で各変数を追加
+
+**重要**: ビルド時に `npm run build` が実行され、これらの環境変数から `public/js/env.js` ファイルが自動生成されます。このファイルにより、ブラウザ側で環境変数を利用できるようになります。
 
 ### 5. LIFF設定の更新
 
