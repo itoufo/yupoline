@@ -1,9 +1,17 @@
-# Yupoline - LIFF App
+# Yupoline - AI占い師 LINE Bot
 
-LIFFアプリとLINE API、Supabaseを統合したWebアプリケーションです。
+Vite + Reactで構築されたLIFFアプリと、OpenAI GPT-4oを使用したAI占い師LINE Botの統合アプリケーションです。
 
-## 機能
+## 主な機能
 
+### LINE Bot機能
+- 🔮 **無料鑑定**: GPT-4oを使った本格的な占い
+- 💬 **無料相談**: 優しい占い師との対話型相談
+- 📊 **自動プロファイリング**: 会話からユーザーの性格や悩みを分析
+- 💾 **会話履歴の保存**: パーソナライズされた応答
+- ✨ **コンテキスト理解**: 過去の会話を踏まえた深い洞察
+
+### LIFF アプリ機能
 - LINE LIFFによるユーザー認証
 - ユーザープロフィールの取得と表示
 - Supabaseへのユーザーデータ保存
@@ -12,35 +20,56 @@ LIFFアプリとLINE API、Supabaseを統合したWebアプリケーションで
 
 ## 技術スタック
 
-- **フロントエンド**: HTML, CSS, JavaScript
+- **フロントエンド**: Vite + React
 - **LIFF SDK**: LINE Front-end Framework
+- **AI**: OpenAI GPT-4o
+- **LINE Bot**: LINE Messaging API SDK
 - **バックエンド**: Supabase (PostgreSQL)
+- **サーバーレス**: Netlify Functions
 - **ホスティング**: Netlify
 
 ## プロジェクト構造
 
 ```
 yupoline/
-├── public/
-│   ├── index.html          # メインHTMLファイル
-│   ├── css/
-│   │   └── style.css       # スタイルシート
-│   ├── js/
-│   │   ├── env.js          # 環境変数（ビルド時自動生成）
-│   │   ├── config.js       # 環境変数設定
-│   │   ├── supabase.js     # Supabaseクライアント
-│   │   └── app.js          # メインアプリケーション
-│   ├── _headers            # Netlifyヘッダー設定
-│   └── _redirects          # Netlifyリダイレクト設定
-├── build.js                # ビルドスクリプト
-├── netlify.toml            # Netlify設定
-├── package.json            # NPM設定
-├── .env.example            # 環境変数テンプレート
-├── .gitignore              # Git除外設定
-└── README.md               # このファイル
+├── src/                           # フロントエンドソース（Vite + React）
+│   ├── main.jsx                  # アプリケーションエントリーポイント
+│   ├── App.jsx                   # メインアプリケーションコンポーネント
+│   ├── index.css                 # グローバルスタイル
+│   ├── components/               # Reactコンポーネント
+│   │   ├── UserProfile.jsx      # ユーザープロフィール表示
+│   │   ├── Actions.jsx          # アクションボタン
+│   │   ├── DataDisplay.jsx      # データ表示
+│   │   ├── Loading.jsx          # ローディング表示
+│   │   └── ErrorMessage.jsx     # エラーメッセージ
+│   ├── hooks/                    # カスタムフック
+│   │   └── useLiff.js           # LIFF初期化フック
+│   └── lib/                      # ライブラリとユーティリティ
+│       ├── config.js            # 環境変数設定
+│       └── supabase.js          # Supabaseクライアント
+├── netlify/                      # Netlify Functions（サーバーレス）
+│   └── functions/
+│       ├── line-webhook.js      # LINE Bot Webhook
+│       └── utils/
+│           ├── supabase.js      # Supabase操作
+│           └── openai.js        # OpenAI統合
+├── database/                     # データベーススキーマ
+│   └── schema.sql               # Supabaseテーブル定義
+├── public/                       # 静的ファイル（旧実装）
+├── index.html                    # メインHTML
+├── vite.config.js               # Vite設定
+├── netlify.toml                 # Netlify設定
+├── package.json                 # NPM設定
+├── .env.example                 # 環境変数テンプレート
+├── LINE_BOT_SETUP.md           # LINE Bot セットアップガイド
+└── README.md                    # このファイル
 ```
 
 ## セットアップ
+
+> **📋 LINE Bot セットアップ**: LINE Bot機能の詳細なセットアップ手順については、[LINE_BOT_SETUP.md](./LINE_BOT_SETUP.md) を参照してください。
+
+### クイックスタート
 
 ### 1. LINE Developers設定
 
@@ -56,40 +85,27 @@ yupoline/
 ### 2. Supabase設定
 
 1. [Supabase](https://supabase.com/) でプロジェクトを作成
-2. SQL Editorで以下のテーブルを作成:
+2. SQL Editorで `database/schema.sql` の内容を実行してテーブルを作成
 
-```sql
--- ユーザーテーブル
-CREATE TABLE yupoline_users (
-  id BIGSERIAL PRIMARY KEY,
-  line_user_id VARCHAR(255) UNIQUE NOT NULL,
-  display_name VARCHAR(255),
-  picture_url TEXT,
-  status_message TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- アクティビティログテーブル
-CREATE TABLE yupoline_activity_logs (
-  id BIGSERIAL PRIMARY KEY,
-  line_user_id VARCHAR(255) NOT NULL,
-  action VARCHAR(100) NOT NULL,
-  metadata JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- インデックス作成
-CREATE INDEX idx_users_line_user_id ON yupoline_users(line_user_id);
-CREATE INDEX idx_activity_logs_line_user_id ON yupoline_activity_logs(line_user_id);
-CREATE INDEX idx_activity_logs_created_at ON yupoline_activity_logs(created_at);
-```
+データベースには以下のテーブルが作成されます：
+- `yupoline_users` - ユーザー情報
+- `user_profiles` - ユーザープロファイリングデータ
+- `conversations` - 会話履歴
+- `conversation_sessions` - 会話セッション管理
+- `yupoline_activity_logs` - アクティビティログ
 
 3. Project Settings → API から以下を取得:
    - Project URL
    - anon/public key
+   - service_role key（LINE Bot用）
 
-### 3. ローカル開発
+### 3. OpenAI API設定
+
+1. [OpenAI Platform](https://platform.openai.com/) にログイン
+2. API Keys ページで新しいキーを作成
+3. キーをコピーして保存（環境変数 `OPENAI_API_KEY` に設定）
+
+### 4. ローカル開発
 
 ```bash
 # 依存関係のインストール
@@ -99,16 +115,13 @@ npm install
 cp .env.example .env
 # .env を編集して実際の値を設定
 
-# ビルド（env.jsを生成）
-npm run build
-
 # 開発サーバーの起動
 npm run dev
 ```
 
-ブラウザで http://localhost:3000 にアクセス
+ブラウザで http://localhost:5173 にアクセス
 
-### 4. Netlifyデプロイ
+### 5. Netlifyデプロイ
 
 #### 方法1: Netlify CLI
 
@@ -130,65 +143,81 @@ netlify deploy --prod
 3. リポジトリを連携
 4. ビルド設定:
    - Build command: `npm run build`
-   - Publish directory: `public`
+   - Publish directory: `dist`
 
 #### 環境変数の設定
 
 Netlify ダッシュボードで以下の環境変数を設定:
 
-- `LIFF_ID`: LINE LIFF ID
+**フロントエンド用（LIFF アプリ）**
+- `VITE_LIFF_ID`: LINE LIFF ID
+- `VITE_SUPABASE_URL`: Supabase Project URL
+- `VITE_SUPABASE_ANON_KEY`: Supabase anon key
+
+**サーバーサイド用（LINE Bot）**
+- `LINE_CHANNEL_ACCESS_TOKEN`: LINE チャネルアクセストークン
+- `LINE_CHANNEL_SECRET`: LINE チャネルシークレット
 - `SUPABASE_URL`: Supabase Project URL
-- `SUPABASE_ANON_KEY`: Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key
+- `OPENAI_API_KEY`: OpenAI API キー
 
 設定方法:
 1. Site settings → Environment variables
 2. Add a variable で各変数を追加
 
-**仕組み**:
-- ローカル開発: `.env` ファイルから環境変数を読み込み
-- Netlify: ダッシュボードで設定した環境変数を使用
-- ビルド時に `npm run build` が実行され、環境変数から `public/js/env.js` ファイルが自動生成されます
-- このファイルにより、ブラウザ側で環境変数を利用できるようになります
+### 6. LINE Bot Webhook設定
 
-### 5. LIFF設定の更新
+1. LINE Developers Consoleで Webhook URLを設定:
+   ```
+   https://your-netlify-site.netlify.app/.netlify/functions/line-webhook
+   ```
+2. Webhookの利用を **有効** にする
+3. 応答メッセージを **無効** にする
+
+### 7. LIFF設定の更新
 
 NetlifyのデプロイURLを取得したら、LINE Developers ConsoleでLIFFアプリのエンドポイントURLを更新してください。
 
 ## 使い方
 
+### LINE Bot（占い師機能）
+
+1. LINE Botを友だち追加
+2. トークでメッセージを送信
+   - 「無料鑑定」をタップ → AI占い師が鑑定を実行
+   - 「無料相談」をタップ → 相談モードで対話開始
+   - 通常のメッセージ → 相談として応答
+3. AI占い師があなたに合わせた応答を生成
+
+### LIFF アプリ
+
 1. LINEアプリでLIFF URLを開く
 2. ログインしてプロフィール取得
 3. 各種機能を利用
-
-### 主な機能
-
-- **プロフィール取得**: LINEプロフィール情報を取得してSupabaseに保存
-- **メッセージ送信**: LINEトークにメッセージを送信
-- **LIFFを閉じる**: LIFFウィンドウを閉じる
+   - **プロフィール取得**: LINEプロフィール情報を取得してSupabaseに保存
+   - **メッセージ送信**: LINEトークにメッセージを送信
+   - **LIFFを閉じる**: LIFFウィンドウを閉じる
 
 ## データベーススキーマ
 
-### yupoline_users
+詳細は `database/schema.sql` を参照してください。
 
-| カラム名 | 型 | 説明 |
-|---------|-----|------|
-| id | BIGSERIAL | 主キー |
-| line_user_id | VARCHAR(255) | LINE ユーザーID（ユニーク） |
-| display_name | VARCHAR(255) | 表示名 |
-| picture_url | TEXT | プロフィール画像URL |
-| status_message | TEXT | ステータスメッセージ |
-| created_at | TIMESTAMP | 作成日時 |
-| updated_at | TIMESTAMP | 更新日時 |
+### 主要テーブル
 
-### yupoline_activity_logs
+#### yupoline_users
+ユーザーの基本情報を保存
 
-| カラム名 | 型 | 説明 |
-|---------|-----|------|
-| id | BIGSERIAL | 主キー |
-| line_user_id | VARCHAR(255) | LINE ユーザーID |
-| action | VARCHAR(100) | アクション名 |
-| metadata | JSONB | 追加情報 |
-| created_at | TIMESTAMP | 作成日時 |
+#### yupoline_user_profiles
+ユーザーのプロファイリングデータ（性格、関心事、悩みなど）を保存
+
+#### yupoline_conversations
+会話履歴を保存（鑑定・相談の記録）
+
+#### yupoline_conversation_sessions
+会話セッションの管理（アクティブな相談セッション）
+
+#### yupoline_activity_logs
+ユーザーアクティビティログ
 
 ## トラブルシューティング
 

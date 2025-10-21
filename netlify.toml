@@ -1,6 +1,6 @@
 
 [build]
-  publish = "public"
+  publish = "dist"
   command = "npm run build"
 
 [[redirects]]
@@ -22,12 +22,7 @@
 
 # キャッシュ設定
 [[headers]]
-  for = "/css/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/js/*"
+  for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
