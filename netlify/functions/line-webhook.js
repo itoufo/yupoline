@@ -47,6 +47,17 @@ async function handleMessageEvent(event) {
     }
 
     // メッセージの種類を判定
+
+    // 誕生日変更リクエスト
+    if (messageText.includes('誕生日') && (messageText.includes('変更') || messageText.includes('修正'))) {
+      return await handleBirthdateChange(event, messageText, userId, profile)
+    }
+
+    // 血液型変更リクエスト
+    if (messageText.includes('血液型') && (messageText.includes('変更') || messageText.includes('修正'))) {
+      return await handleBloodTypeChange(event, messageText, userId, profile)
+    }
+
     if (messageText === '無料鑑定' || messageText.includes('鑑定')) {
       return await handleFortuneTelling(event, userProfile, profile)
     } else if (messageText === '無料相談' || messageText.includes('相談')) {
@@ -414,6 +425,16 @@ function parseBirthdate(text) {
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
   }
 
+  // YYYYMMDD 形式（8桁の数字）
+  match = text.match(/(\d{8})/)
+  if (match) {
+    const dateStr = match[1]
+    const year = dateStr.substring(0, 4)
+    const month = dateStr.substring(4, 6)
+    const day = dateStr.substring(6, 8)
+    return `${year}-${month}-${day}`
+  }
+
   return null
 }
 
@@ -525,6 +546,80 @@ async function handleConsultation(event, userProfile, profile) {
     })
   } catch (error) {
     console.error('Consultation error:', error)
+    throw error
+  }
+}
+
+// 誕生日変更リクエストを処理
+async function handleBirthdateChange(event, messageText, userId, profile) {
+  try {
+    // メッセージから誕生日を抽出
+    const birthDate = parseBirthdate(messageText)
+
+    if (birthDate) {
+      // 誕生日が見つかった場合：更新
+      await updateUserProfile(userId, { birth_date: birthDate })
+
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `✨ 誕生日を更新しました\n\n${formatBirthdate(birthDate)}\n\n次回の鑑定から、この誕生日で占わせていただきますね。`,
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: '🔮 無料鑑定', text: '無料鑑定' } },
+            { type: 'action', action: { type: 'message', label: '💬 無料相談', text: '無料相談' } }
+          ]
+        }
+      })
+    } else {
+      // 誕生日が見つからなかった場合：入力を促す
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `誕生日を教えてください。\n\n例：\n・1990年7月3日\n・1990/07/03\n・19900703`
+      })
+    }
+  } catch (error) {
+    console.error('Birthdate change error:', error)
+    throw error
+  }
+}
+
+// 血液型変更リクエストを処理
+async function handleBloodTypeChange(event, messageText, userId, profile) {
+  try {
+    // メッセージから血液型を抽出
+    const bloodType = parseBloodType(messageText)
+
+    if (bloodType) {
+      // 血液型が見つかった場合：更新
+      await updateUserProfile(userId, { blood_type: bloodType })
+
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `✨ 血液型を更新しました\n\n${bloodType}型\n\n次回の鑑定から、この血液型で占わせていただきますね。`,
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: '🔮 無料鑑定', text: '無料鑑定' } },
+            { type: 'action', action: { type: 'message', label: '💬 無料相談', text: '無料相談' } }
+          ]
+        }
+      })
+    } else {
+      // 血液型が見つからなかった場合：選択を促す
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '血液型を教えてください。',
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: 'A型', text: 'A型' } },
+            { type: 'action', action: { type: 'message', label: 'B型', text: 'B型' } },
+            { type: 'action', action: { type: 'message', label: 'O型', text: 'O型' } },
+            { type: 'action', action: { type: 'message', label: 'AB型', text: 'AB型' } }
+          ]
+        }
+      })
+    }
+  } catch (error) {
+    console.error('Blood type change error:', error)
     throw error
   }
 }
