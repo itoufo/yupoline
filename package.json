@@ -1,0 +1,25 @@
+{
+  "name": "yupoline",
+  "version": "1.0.0",
+  "description": "LIFF app with LINE API and Supabase backend",
+  "main": "public/index.html",
+  "scripts": {
+    "dev": "npx serve public",
+    "build": "echo 'No build step required for static site'",
+    "preview": "npx serve public"
+  },
+  "keywords": [
+    "liff",
+    "line",
+    "supabase",
+    "netlify"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}

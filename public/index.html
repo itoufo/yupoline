@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yupoline - LIFF App</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Yupoline</h1>
+        </header>
+
+        <main>
+            <div id="loading" class="loading">
+                <p>読み込み中...</p>
+            </div>
+
+            <div id="app" class="app-content" style="display: none;">
+                <section class="user-info">
+                    <h2>ユーザー情報</h2>
+                    <div id="user-profile">
+                        <p>ログインしていません</p>
+                    </div>
+                </section>
+
+                <section class="actions">
+                    <h2>機能</h2>
+                    <button id="btn-get-profile" class="btn btn-primary">
+                        プロフィール取得
+                    </button>
+                    <button id="btn-send-message" class="btn btn-secondary">
+                        メッセージ送信
+                    </button>
+                    <button id="btn-close-liff" class="btn btn-danger">
+                        LIFFを閉じる
+                    </button>
+                </section>
+
+                <section class="data-section">
+                    <h2>データ管理</h2>
+                    <div id="data-display">
+                        <p>データはここに表示されます</p>
+                    </div>
+                </section>
+            </div>
+
+            <div id="error" class="error-message" style="display: none;">
+                <p id="error-text"></p>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Yupoline</p>
+        </footer>
+    </div>
+
+    <!-- LIFF SDK -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- App Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
