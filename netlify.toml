@@ -33,7 +33,5 @@
     Cache-Control = "public, max-age=0, must-revalidate"
 
 # Scheduled Functions
-[[functions]]
-  # 予約配信実行（毎分実行）
-  [functions."scheduled-broadcast"]
-    schedule = "* * * * *"
+[functions."scheduled-broadcast"]
+  schedule = "* * * * *"
