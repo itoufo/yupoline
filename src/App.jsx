@@ -6,8 +6,18 @@ import Actions from './components/Actions'
 import DataDisplay from './components/DataDisplay'
 import Loading from './components/Loading'
 import ErrorMessage from './components/ErrorMessage'
+import AdminApp from './admin/AdminApp'
 
 function App() {
+  // 管理画面へのルーティング
+  if (window.location.pathname.startsWith('/admin')) {
+    return <AdminApp />
+  }
+
+  return <LiffApp />
+}
+
+function LiffApp() {
   const { liff, isLoggedIn, isReady, error: liffError } = useLiff()
   const [userProfile, setUserProfile] = useState(null)
   const [userData, setUserData] = useState(null)
