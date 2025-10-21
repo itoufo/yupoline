@@ -1,0 +1,697 @@
+import { Client } from '@line/bot-sdk'
+import {
+  supabase,
+  getOrCreateUser,
+  getUserProfile,
+  updateUserProfile,
+  saveConversation,
+  getConversationHistory,
+  getOrCreateSession,
+  updateSession,
+  completeSession,
+  saveActivityLog
+} from '../utils/supabase.js'
+import {
+  performFortuneTelling,
+  performConsultation,
+  analyzeUserProfile
+} from '../utils/openai.js'
+
+let client = null
+
+// クライアントを初期化
+export function initializeClient(config) {
+  client = new Client(config)
+  return client
+}
+
+// メッセージイベントの処理
+async function handleMessageEvent(event) {
+  const userId = event.source.userId
+  const messageText = event.message.text
+
+  try {
+    // ユーザー情報を取得または作成
+    const profile = await client.getProfile(userId)
+    await getOrCreateUser(userId, profile)
+
+    // ユーザープロファイルを取得
+    const userProfile = await getUserProfile(userId)
+
+    // アクティブな鑑定セッションがあるか確認
+    const fortuneSession = await getActiveSession(userId, 'fortune_telling')
+
+    // 鑑定セッション中の場合は優先的に処理
+    if (fortuneSession && ['ask_birthdate', 'ask_blood_type', 'ask_category'].includes(fortuneSession.current_state)) {
+      return await handleFortuneTelling(event, userProfile, profile)
+    }
+
+    // メッセージの種類を判定
+
+    // 誕生日変更リクエスト
+    if (messageText.includes('誕生日') && (messageText.includes('変更') || messageText.includes('修正'))) {
+      return await handleBirthdateChange(event, messageText, userId, profile)
+    }
+
+    // 血液型変更リクエスト
+    if (messageText.includes('血液型') && (messageText.includes('変更') || messageText.includes('修正'))) {
+      return await handleBloodTypeChange(event, messageText, userId, profile)
+    }
+
+    if (messageText === '無料鑑定' || messageText.includes('鑑定')) {
+      return await handleFortuneTelling(event, userProfile, profile)
+    } else if (messageText === '無料相談' || messageText.includes('相談')) {
+      return await handleConsultation(event, userProfile, profile)
+    } else {
+      // アクティブな相談セッションがあるか確認
+      const consultationSession = await getActiveSession(userId, 'consultation')
+
+      if (consultationSession && consultationSession.status === 'active') {
+        // 既存の相談セッション継続
+        return await handleConsultation(event, userProfile, profile)
+      } else {
+        // 初回メッセージまたはメニュー表示
+        return await handleWelcomeMessage(event, profile)
+      }
+    }
+  } catch (error) {
+    console.error('Error handling message:', error)
+
+    // エラーメッセージを返す
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '申し訳ございません。一時的なエラーが発生しました。もう一度お試しください。'
+    })
+  }
+}
+
+// アクティブなセッションを取得（新規作成しない）
+async function getActiveSession(lineUserId, sessionType) {
+  const { data, error } = await supabase
+    .from('yupoline_conversation_sessions')
+    .select('*')
+    .eq('line_user_id', lineUserId)
+    .eq('session_type', sessionType)
+    .eq('status', 'active')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error && error.code !== 'PGRST116') throw error
+  return data
+}
+
+// 無料鑑定の処理
+async function handleFortuneTelling(event, userProfile, profile) {
+  const userId = event.source.userId
+  const messageText = event.message.text
+
+  try {
+    // 「無料鑑定」メッセージの場合は新しいセッションを開始
+    if (messageText === '無料鑑定') {
+      // 既存のアクティブセッションを完了
+      const existingSession = await getActiveSession(userId, 'fortune_telling')
+      if (existingSession) {
+        await completeSession(existingSession.id)
+      }
+
+      // アクティビティログを保存
+      await saveActivityLog(userId, 'fortune_telling_start', { message: messageText })
+
+      // 保存済みの誕生日と血液型をチェック
+      const hasBirthdate = userProfile && userProfile.birth_date
+      const hasBloodType = userProfile && userProfile.blood_type
+
+      if (hasBirthdate && hasBloodType) {
+        // 両方ある場合：カテゴリ選択から始める
+        const session = await getOrCreateSession(userId, 'fortune_telling', 'ask_category')
+        await updateSession(session.id, 'ask_category', {
+          birthDate: userProfile.birth_date,
+          bloodType: userProfile.blood_type
+        })
+
+        return client.replyMessage(event.replyToken, {
+          type: 'text',
+          text: `🔮 ${profile.displayName}様\n\n誕生日：${formatBirthdate(userProfile.birth_date)}\n血液型：${userProfile.blood_type}型\n\nこの情報で占わせていただきますね✨\n何について占いますか？`,
+          quickReply: {
+            items: [
+              { type: 'action', action: { type: 'message', label: '💕 恋愛運', text: '恋愛運' } },
+              { type: 'action', action: { type: 'message', label: '💼 仕事運', text: '仕事運' } },
+              { type: 'action', action: { type: 'message', label: '💰 金運', text: '金運' } },
+              { type: 'action', action: { type: 'message', label: '🍀 総合運', text: '総合運' } },
+              { type: 'action', action: { type: 'message', label: '👥 対人運', text: '対人運' } }
+            ]
+          }
+        })
+      } else if (hasBirthdate && !hasBloodType) {
+        // 誕生日のみある場合：血液型を聞く
+        const session = await getOrCreateSession(userId, 'fortune_telling', 'ask_blood_type')
+        await updateSession(session.id, 'ask_blood_type', {
+          birthDate: userProfile.birth_date
+        })
+
+        return client.replyMessage(event.replyToken, {
+          type: 'text',
+          text: `🔮 ${profile.displayName}様\n\n誕生日：${formatBirthdate(userProfile.birth_date)}\n\n次に、血液型を教えてください。`,
+          quickReply: {
+            items: [
+              { type: 'action', action: { type: 'message', label: 'A型', text: 'A型' } },
+              { type: 'action', action: { type: 'message', label: 'B型', text: 'B型' } },
+              { type: 'action', action: { type: 'message', label: 'O型', text: 'O型' } },
+              { type: 'action', action: { type: 'message', label: 'AB型', text: 'AB型' } }
+            ]
+          }
+        })
+      } else {
+        // 誕生日がない場合：誕生日を聞く
+        const session = await getOrCreateSession(userId, 'fortune_telling', 'ask_birthdate')
+        return askBirthdate(event, profile)
+      }
+    }
+
+    // 既存のセッションを取得
+    const session = await getActiveSession(userId, 'fortune_telling')
+
+    if (!session) {
+      // セッションがない場合は新規作成して誕生日を聞く
+      const newSession = await getOrCreateSession(userId, 'fortune_telling', 'ask_birthdate')
+      return askBirthdate(event, profile)
+    }
+
+    // アクティビティログを保存
+    await saveActivityLog(userId, 'fortune_telling_request', { message: messageText, state: session.current_state })
+
+    // セッションの状態に応じて処理を分岐
+    switch (session.current_state) {
+      case 'ask_birthdate':
+        return await handleBirthdateResponse(event, session, userProfile, profile)
+
+      case 'ask_blood_type':
+        return await handleBloodTypeResponse(event, session, userProfile, profile)
+
+      case 'ask_category':
+        return await handleCategoryResponse(event, session, userProfile, profile)
+
+      default:
+        // 不明な状態の場合は新しいセッションを開始
+        await updateSession(session.id, 'ask_birthdate', {})
+        return askBirthdate(event, profile)
+    }
+  } catch (error) {
+    console.error('Fortune telling error:', error)
+    throw error
+  }
+}
+
+// 誕生日を読みやすい形式にフォーマット
+function formatBirthdate(birthDate) {
+  if (!birthDate) return ''
+
+  const date = new Date(birthDate)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+
+  return `${year}年${month}月${day}日`
+}
+
+// 誕生日を聞く
+function askBirthdate(event, profile) {
+  return client.replyMessage(event.replyToken, {
+    type: 'text',
+    text: `🔮 ${profile.displayName}様\n\n鑑定のために、まずはあなたの誕生日を教えてください。\n\n例：1990年1月15日\n　　1990/01/15`
+  })
+}
+
+// 誕生日の回答を処理
+async function handleBirthdateResponse(event, session, userProfile, profile) {
+  const userId = event.source.userId
+  const messageText = event.message.text
+
+  // 誕生日をパース
+  const birthDate = parseBirthdate(messageText)
+
+  if (!birthDate) {
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '申し訳ございません。誕生日の形式が認識できませんでした。\n\n「1990年1月15日」や「1990/01/15」の形式で教えてください。'
+    })
+  }
+
+  // プロファイルに誕生日を保存
+  await updateUserProfile(userId, { birth_date: birthDate })
+
+  // 血液型が既に保存されているかチェック
+  const hasBloodType = userProfile && userProfile.blood_type
+
+  if (hasBloodType) {
+    // 血液型が既にある場合：カテゴリ選択に進む
+    const sessionData = { birthDate, bloodType: userProfile.blood_type }
+    await updateSession(session.id, 'ask_category', sessionData)
+
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: `ありがとうございます✨\n\n誕生日：${formatBirthdate(birthDate)}\n血液型：${userProfile.blood_type}型\n\nこの情報で占わせていただきますね。\n何について占いますか？`,
+      quickReply: {
+        items: [
+          { type: 'action', action: { type: 'message', label: '💕 恋愛運', text: '恋愛運' } },
+          { type: 'action', action: { type: 'message', label: '💼 仕事運', text: '仕事運' } },
+          { type: 'action', action: { type: 'message', label: '💰 金運', text: '金運' } },
+          { type: 'action', action: { type: 'message', label: '🍀 総合運', text: '総合運' } },
+          { type: 'action', action: { type: 'message', label: '👥 対人運', text: '対人運' } }
+        ]
+      }
+    })
+  } else {
+    // 血液型がない場合：血液型を聞く
+    const sessionData = { birthDate }
+    await updateSession(session.id, 'ask_blood_type', sessionData)
+
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: `ありがとうございます✨\n\n次に、血液型を教えてください。`,
+      quickReply: {
+        items: [
+          { type: 'action', action: { type: 'message', label: 'A型', text: 'A型' } },
+          { type: 'action', action: { type: 'message', label: 'B型', text: 'B型' } },
+          { type: 'action', action: { type: 'message', label: 'O型', text: 'O型' } },
+          { type: 'action', action: { type: 'message', label: 'AB型', text: 'AB型' } }
+        ]
+      }
+    })
+  }
+}
+
+// 血液型の回答を処理
+async function handleBloodTypeResponse(event, session, userProfile, profile) {
+  const userId = event.source.userId
+  const messageText = event.message.text
+
+  // 血液型を解析
+  const bloodType = parseBloodType(messageText)
+
+  if (!bloodType) {
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '申し訳ございません。血液型が認識できませんでした。\n\nA型、B型、O型、AB型のいずれかを選択してください。',
+      quickReply: {
+        items: [
+          { type: 'action', action: { type: 'message', label: 'A型', text: 'A型' } },
+          { type: 'action', action: { type: 'message', label: 'B型', text: 'B型' } },
+          { type: 'action', action: { type: 'message', label: 'O型', text: 'O型' } },
+          { type: 'action', action: { type: 'message', label: 'AB型', text: 'AB型' } }
+        ]
+      }
+    })
+  }
+
+  // セッションデータを更新
+  const sessionData = { ...session.session_data, bloodType }
+  await updateSession(session.id, 'ask_category', sessionData)
+
+  // プロファイルに血液型を保存
+  await updateUserProfile(userId, { blood_type: bloodType })
+
+  // 占いたいカテゴリを聞く
+  return client.replyMessage(event.replyToken, {
+    type: 'text',
+    text: `${bloodType}型なのですね✨\n\nそれでは、何について占いますか？`,
+    quickReply: {
+      items: [
+        { type: 'action', action: { type: 'message', label: '💕 恋愛運', text: '恋愛運' } },
+        { type: 'action', action: { type: 'message', label: '💼 仕事運', text: '仕事運' } },
+        { type: 'action', action: { type: 'message', label: '💰 金運', text: '金運' } },
+        { type: 'action', action: { type: 'message', label: '🍀 総合運', text: '総合運' } },
+        { type: 'action', action: { type: 'message', label: '👥 対人運', text: '対人運' } }
+      ]
+    }
+  })
+}
+
+// カテゴリの回答を処理して占いを実行
+async function handleCategoryResponse(event, session, userProfile, profile) {
+  const userId = event.source.userId
+  const messageText = event.message.text
+
+  // カテゴリを解析
+  const category = parseCategory(messageText)
+
+  if (!category) {
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '申し訳ございません。カテゴリが認識できませんでした。\n\n以下から選択してください。',
+      quickReply: {
+        items: [
+          { type: 'action', action: { type: 'message', label: '💕 恋愛運', text: '恋愛運' } },
+          { type: 'action', action: { type: 'message', label: '💼 仕事運', text: '仕事運' } },
+          { type: 'action', action: { type: 'message', label: '💰 金運', text: '金運' } },
+          { type: 'action', action: { type: 'message', label: '🍀 総合運', text: '総合運' } },
+          { type: 'action', action: { type: 'message', label: '👥 対人運', text: '対人運' } }
+        ]
+      }
+    })
+  }
+
+  // セッションデータを更新
+  const sessionData = { ...session.session_data, category }
+  await updateSession(session.id, 'processing', sessionData)
+
+  // 会話履歴を取得
+  const history = await getConversationHistory(userId, 5)
+
+  // 鑑定リクエストを構築
+  const { birthDate, bloodType } = session.session_data
+  const fortuneRequest = `誕生日: ${birthDate}, 血液型: ${bloodType}, 占いたいこと: ${category}`
+
+  // GPTで鑑定を実行
+  const enrichedProfile = { ...userProfile, birth_date: birthDate, blood_type: bloodType }
+  const { message: fortuneResult, metadata } = await performFortuneTelling(
+    fortuneRequest,
+    enrichedProfile,
+    history
+  )
+
+  // 会話履歴を保存
+  await saveConversation(
+    userId,
+    'fortune_telling',
+    fortuneRequest,
+    fortuneResult,
+    { ...metadata, category, birthDate, bloodType }
+  )
+
+  // セッションを完了
+  await completeSession(session.id)
+
+  // 応答を返す
+  return client.replyMessage(event.replyToken, [
+    {
+      type: 'text',
+      text: `🔮 ${profile.displayName}様への${category}鑑定結果\n\n${fortuneResult}`
+    },
+    {
+      type: 'text',
+      text: '他にもお悩みがあれば、お気軽にご相談くださいね✨',
+      quickReply: {
+        items: [
+          { type: 'action', action: { type: 'message', label: '🔮 もう一度鑑定', text: '無料鑑定' } },
+          { type: 'action', action: { type: 'message', label: '💬 相談する', text: '無料相談' } }
+        ]
+      }
+    }
+  ])
+}
+
+// 誕生日のパース
+function parseBirthdate(text) {
+  // YYYY年MM月DD日 形式
+  let match = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/)
+  if (match) {
+    const [_, year, month, day] = match
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  // YYYY/MM/DD 形式
+  match = text.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/)
+  if (match) {
+    const [_, year, month, day] = match
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  // YYYY-MM-DD 形式
+  match = text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (match) {
+    const [_, year, month, day] = match
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  // YYYYMMDD 形式（8桁の数字）
+  match = text.match(/(\d{8})/)
+  if (match) {
+    const dateStr = match[1]
+    const year = dateStr.substring(0, 4)
+    const month = dateStr.substring(4, 6)
+    const day = dateStr.substring(6, 8)
+    return `${year}-${month}-${day}`
+  }
+
+  return null
+}
+
+// 血液型のパース
+function parseBloodType(text) {
+  const normalized = text.replace(/\s+/g, '').toUpperCase()
+
+  if (normalized.includes('A') && normalized.includes('B')) return 'AB'
+  if (normalized.includes('A')) return 'A'
+  if (normalized.includes('B')) return 'B'
+  if (normalized.includes('O')) return 'O'
+
+  return null
+}
+
+// カテゴリのパース
+function parseCategory(text) {
+  const categories = {
+    '恋愛': '恋愛運',
+    '仕事': '仕事運',
+    '金運': '金運',
+    '総合': '総合運',
+    '対人': '対人運'
+  }
+
+  for (const [key, value] of Object.entries(categories)) {
+    if (text.includes(key)) return value
+  }
+
+  return null
+}
+
+// 無料相談の処理
+async function handleConsultation(event, userProfile, profile) {
+  const userId = event.source.userId
+  const messageText = event.message.text
+
+  try {
+    // セッションを作成または更新
+    await getOrCreateSession(userId, 'consultation')
+
+    // アクティビティログを保存
+    await saveActivityLog(userId, 'consultation_message', { message: messageText })
+
+    // 会話履歴を取得（最新10件）
+    const history = await getConversationHistory(userId, 10)
+
+    // 相談メッセージ
+    let consultationMessage = messageText
+    if (messageText === '無料相談') {
+      consultationMessage = 'こんにちは。どんなことでお悩みですか？お気軽にお話しください。'
+
+      // 初回メッセージ
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `💖 ${profile.displayName}様、ようこそ\n\nこんにちは。どんなことでお悩みですか？\n\n恋愛、仕事、人間関係、将来のこと...何でもお気軽にお話しくださいね。\n\nあなたの心に寄り添い、一緒に考えていきましょう✨`
+      })
+    }
+
+    // GPTで応答を生成
+    const { message: response, metadata } = await performConsultation(
+      consultationMessage,
+      userProfile,
+      history
+    )
+
+    // 会話履歴を保存
+    await saveConversation(
+      userId,
+      'consultation',
+      consultationMessage,
+      response,
+      metadata
+    )
+
+    // プロファイリング更新（3回会話ごと）
+    const updatedHistory = await getConversationHistory(userId, 10)
+    if (updatedHistory.length > 0 && updatedHistory.length % 3 === 0) {
+      const analysis = await analyzeUserProfile(updatedHistory, userProfile)
+      if (analysis) {
+        await updateUserProfile(userId, analysis)
+      }
+    }
+
+    // 応答を返す
+    return client.replyMessage(event.replyToken, {
+      type: 'text',
+      text: response,
+      quickReply: {
+        items: [
+          {
+            type: 'action',
+            action: {
+              type: 'message',
+              label: '🔮 鑑定してほしい',
+              text: '無料鑑定'
+            }
+          },
+          {
+            type: 'action',
+            action: {
+              type: 'message',
+              label: '💬 続けて相談',
+              text: 'はい'
+            }
+          }
+        ]
+      }
+    })
+  } catch (error) {
+    console.error('Consultation error:', error)
+    throw error
+  }
+}
+
+// 誕生日変更リクエストを処理
+async function handleBirthdateChange(event, messageText, userId, profile) {
+  try {
+    // メッセージから誕生日を抽出
+    const birthDate = parseBirthdate(messageText)
+
+    if (birthDate) {
+      // 誕生日が見つかった場合：更新
+      await updateUserProfile(userId, { birth_date: birthDate })
+
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `✨ 誕生日を更新しました\n\n${formatBirthdate(birthDate)}\n\n次回の鑑定から、この誕生日で占わせていただきますね。`,
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: '🔮 無料鑑定', text: '無料鑑定' } },
+            { type: 'action', action: { type: 'message', label: '💬 無料相談', text: '無料相談' } }
+          ]
+        }
+      })
+    } else {
+      // 誕生日が見つからなかった場合：入力を促す
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `誕生日を教えてください。\n\n例：\n・1990年7月3日\n・1990/07/03\n・19900703`
+      })
+    }
+  } catch (error) {
+    console.error('Birthdate change error:', error)
+    throw error
+  }
+}
+
+// 血液型変更リクエストを処理
+async function handleBloodTypeChange(event, messageText, userId, profile) {
+  try {
+    // メッセージから血液型を抽出
+    const bloodType = parseBloodType(messageText)
+
+    if (bloodType) {
+      // 血液型が見つかった場合：更新
+      await updateUserProfile(userId, { blood_type: bloodType })
+
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `✨ 血液型を更新しました\n\n${bloodType}型\n\n次回の鑑定から、この血液型で占わせていただきますね。`,
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: '🔮 無料鑑定', text: '無料鑑定' } },
+            { type: 'action', action: { type: 'message', label: '💬 無料相談', text: '無料相談' } }
+          ]
+        }
+      })
+    } else {
+      // 血液型が見つからなかった場合：選択を促す
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '血液型を教えてください。',
+        quickReply: {
+          items: [
+            { type: 'action', action: { type: 'message', label: 'A型', text: 'A型' } },
+            { type: 'action', action: { type: 'message', label: 'B型', text: 'B型' } },
+            { type: 'action', action: { type: 'message', label: 'O型', text: 'O型' } },
+            { type: 'action', action: { type: 'message', label: 'AB型', text: 'AB型' } }
+          ]
+        }
+      })
+    }
+  } catch (error) {
+    console.error('Blood type change error:', error)
+    throw error
+  }
+}
+
+// ウェルカムメッセージ
+async function handleWelcomeMessage(event, profile) {
+  return client.replyMessage(event.replyToken, {
+    type: 'text',
+    text: `✨ ${profile.displayName}様、こんにちは\n\n私は優しい占い師です。\nあなたの心に寄り添い、未来への道しるべをお示しいたします。\n\n【ご利用方法】\n🔮 無料鑑定 - 今日の運勢や気になることを占います\n💬 無料相談 - お悩みをじっくりお聴きします\n\nどちらかお選びください✨`,
+    quickReply: {
+      items: [
+        {
+          type: 'action',
+          action: {
+            type: 'message',
+            label: '🔮 無料鑑定',
+            text: '無料鑑定'
+          }
+        },
+        {
+          type: 'action',
+          action: {
+            type: 'message',
+            label: '💬 無料相談',
+            text: '無料相談'
+          }
+        }
+      ]
+    }
+  })
+}
+
+// Postbackイベントの処理（リッチメニューなど）
+async function handlePostbackEvent(event) {
+  const userId = event.source.userId
+  const data = event.postback.data
+
+  const profile = await client.getProfile(userId)
+  await getOrCreateUser(userId, profile)
+
+  if (data === 'fortune_telling') {
+    event.message = { text: '無料鑑定' }
+    return handleMessageEvent(event)
+  } else if (data === 'consultation') {
+    event.message = { text: '無料相談' }
+    return handleMessageEvent(event)
+  }
+}
+
+// 占い師Botのイベント処理
+export async function handleEvents(webhookEvents) {
+  const results = await Promise.all(
+    webhookEvents.map(async (webhookEvent) => {
+      try {
+        if (webhookEvent.type === 'message' && webhookEvent.message.type === 'text') {
+          return await handleMessageEvent(webhookEvent)
+        } else if (webhookEvent.type === 'postback') {
+          return await handlePostbackEvent(webhookEvent)
+        } else if (webhookEvent.type === 'follow') {
+          // フォローイベント
+          const profile = await client.getProfile(webhookEvent.source.userId)
+          await getOrCreateUser(webhookEvent.source.userId, profile)
+          await saveActivityLog(webhookEvent.source.userId, 'follow')
+          return handleWelcomeMessage(webhookEvent, profile)
+        }
+        return null
+      } catch (err) {
+        console.error('Fortune teller event handling error:', err)
+        return null
+      }
+    })
+  )
+
+  return results
+}
